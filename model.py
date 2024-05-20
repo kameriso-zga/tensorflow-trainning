@@ -10,6 +10,7 @@ from tensorflow.keras.metrics import SparseCategoricalAccuracy
 strategy = tf.distribute.MirroredStrategy()
 print('设备数量: {}'.format(strategy.num_replicas_in_sync))
 
+
 (preprocessed_x_train, prehotencoded_y_trained), (preprocessed_x_test, prehotencoded_y_test) = func.load_data()
 
 x_train, x_test, input_shape = func.data_preprocessor(preprocessed_x_train, preprocessed_x_test)
