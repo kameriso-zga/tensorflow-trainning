@@ -8,35 +8,24 @@ from tensorflow.keras.losses import SparseCategoricalCrossentropy
 from tensorflow.keras.metrics import SparseCategoricalAccuracy
 
 
-
-#以上测试的结果还是在不同的卡上调度
-
-
-# Worker 0
-os.environ["TF_CONFIG"] = json.dumps({
-    "cluster": {
-        "worker": ["localhost:12345", "localhost:23456"]
-    },
-    "task": {"type": "worker", "index": 0}
-})
-
-# Worker 1
-os.environ["TF_CONFIG"] = json.dumps({
-    "cluster": {
-        "worker": ["localhost:12345", "localhost:23456"]
-    },
-    "task": {"type": "worker", "index": 1}
-})
-
-
 def get_strategy():
     # 创建MirroredStrategy策略
-    strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+    # config the cluster and task types
+    os.environ["TF_CONFIG"] = json.dumps({
+        "cluster": {
+            "worker": ["10.16.0.9:12345", "10.16.0.8:12345"]
+        },
+        "task": {"type": "worker", "index": 1}
+    })
+
+    #在10.16.0.8 上需要修改 环境变量为 "task": {"type": "worker", "index": 0}
+
+    strategy = tf.distribute.MultiWorkerMirroredStrategy()
     print('设备数量: {}'.format(strategy.num_replicas_in_sync))
     return strategy
 
 
-def load_data(global_batch_size, strategy):
+def load_data(global_batch_size,strategy):
     # 获取和预处理数据集
     buffer_size = 10000
     (x_train, y_train), _ = tf.keras.datasets.mnist.load_data()
@@ -76,14 +65,11 @@ def train_step(inputs, model, loss_fn, optimizer, global_batch_size):
     return loss
 
 
-def run_training(train_dist_dataset, steps, model, loss_fn, optimizer, global_batch_size, strategy,checkpoint_manager):
+def run_training(train_dist_dataset, steps, model, loss_fn, optimizer, global_batch_size,strategy):
     for i, inputs in enumerate(train_dist_dataset):
         if i > steps:
             break
         loss = strategy.run(train_step, args=(inputs, model, loss_fn, optimizer, global_batch_size))
-        print('训练步数 {}，损失值：{}'.format(i, loss))
-        if i % 10 == 0:
-            checkpoint_manager.save()
         print('训练步数 {}，损失值：{}'.format(i, loss))
 
 
@@ -96,21 +82,18 @@ def main():
     global_batch_size = batch_size_per_replica * strategy.num_replicas_in_sync
 
     # 加载数据
-    train_dist_dataset = load_data(global_batch_size, strategy)
+    train_dist_dataset = load_data(global_batch_size,strategy)
 
     # 在策略范围内定义模型和优化器
     with strategy.scope():
         model, optimizer = define_model_and_optimizer()
         loss_fn = SparseCategoricalCrossentropy(from_logits=True, reduction='none')
-        # 定义checkpoint和checkpoint manager
-        checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
-        manager = tf.train.CheckpointManager(checkpoint, './tf_ckpts', max_to_keep=3)
 
-    checkpoint_manager = manager
     # 开始训练
     steps = 20
-    run_training(train_dist_dataset, steps, model, loss_fn, optimizer, global_batch_size, strategy,checkpoint_manager)
+    run_training(train_dist_dataset, steps, model, loss_fn, optimizer, global_batch_size,strategy)
 
 
 if __name__ == "__main__":
     main()
+
