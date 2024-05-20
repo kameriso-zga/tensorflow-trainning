@@ -1,5 +1,14 @@
 import functions as func
+import tensorflow as tf
 from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.losses import SparseCategoricalCrossentropy
+from tensorflow.keras.metrics import SparseCategoricalAccuracy
+
+# 创建MirroredStrategy策略
+strategy = tf.distribute.MirroredStrategy()
+print('设备数量: {}'.format(strategy.num_replicas_in_sync))
 
 (preprocessed_x_train, prehotencoded_y_trained), (preprocessed_x_test, prehotencoded_y_test) = func.load_data()
 
