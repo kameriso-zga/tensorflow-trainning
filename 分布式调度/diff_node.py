@@ -15,11 +15,10 @@ def get_strategy():
         "cluster": {
             "worker": ["10.16.0.9:12345", "10.16.0.8:12345"]
         },
-        "task": {"type": "worker", "index": 1}
+        "task": {"type": "worker", "index": 0}
     })
 
     #在10.16.0.8 上需要修改 环境变量为 "task": {"type": "worker", "index": 0}
-
     strategy = tf.distribute.MultiWorkerMirroredStrategy()
     print('设备数量: {}'.format(strategy.num_replicas_in_sync))
     return strategy
