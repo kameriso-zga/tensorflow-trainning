@@ -28,7 +28,7 @@ tf_config = json.loads(os.environ['TF_CONFIG'])
 num_workers = len(tf_config['cluster']['worker'])
 global_batch_size = per_worker_batch_size * num_workers
 
-num_epochs = 3
+num_epochs = 10
 num_steps_per_epoch=70
 
 # Checkpoint saving and restoring
@@ -52,7 +52,8 @@ def write_filepath(filepath, task_type, task_id, cluster_spec):
     dirpath = _get_temp_dir(dirpath, task_id)
   return os.path.join(dirpath, base)
 
-checkpoint_dir = os.path.join(util.get_temp_dir(), 'ckpt')
+#20 断掉，21 开始的时候主从是否可以同步
+checkpoint_dir = os.path.join("/tmp/tf-te", 'ckpt')
 
 # Define Strategy
 strategy = tf.distribute.MultiWorkerMirroredStrategy()
@@ -105,7 +106,6 @@ task_type, task_id, cluster_spec = (strategy.cluster_resolver.task_type,
 
 checkpoint = tf.train.Checkpoint(
     model=multi_worker_model, epoch=epoch, step_in_epoch=step_in_epoch)
-tf.print("checkpoint done")
 write_checkpoint_dir = write_filepath(checkpoint_dir, task_type, task_id,
                                       cluster_spec)
 
@@ -115,15 +115,16 @@ checkpoint_manager = tf.train.CheckpointManager(
 # Restoring the checkpoint
 latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
 if latest_checkpoint:
+  print('latest_checkpoint')
   checkpoint.restore(latest_checkpoint)
 
-print('start to loop...')
+
 # Resume our CTL training
 while epoch.numpy() < num_epochs:
+  print('while loop current epoch is : ', epoch)
   iterator = iter(multi_worker_dataset)
   total_loss = 0.0
   num_batches = 0
-  print('start to second loop...')
   while step_in_epoch.numpy() < num_steps_per_epoch:
     total_loss += train_step(iterator)
     num_batches += 1
@@ -136,7 +137,7 @@ while epoch.numpy() < num_epochs:
   train_accuracy.reset_states()
 
   check_point_path = checkpoint_manager.save()
-  tf.print('Checkpoint saved at ', check_point_path)
+
   if not _is_chief(task_type, task_id, cluster_spec):
     tf.io.gfile.rmtree(write_checkpoint_dir)
 
