@@ -1,4 +1,3 @@
-%%writefile mnist.py
 
 import os
 import tensorflow as tf
