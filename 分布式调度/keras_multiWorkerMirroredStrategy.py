@@ -94,6 +94,9 @@ def train_step(iterator):
   return strategy.reduce(
       tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
+
+
+
 epoch = tf.Variable(
     initial_value=tf.constant(0, dtype=tf.dtypes.int64), name='epoch')
 step_in_epoch = tf.Variable(
@@ -118,25 +121,27 @@ if latest_checkpoint:
   print('latest_checkpoint')
   checkpoint.restore(latest_checkpoint)
 
-
+#num_epochs = 10
 # Resume our CTL training
 while epoch.numpy() < num_epochs:
-  print('while loop current epoch is : ', epoch)
+  print('while loop current epoch is : ', epoch.numpy())
   iterator = iter(multi_worker_dataset)
   total_loss = 0.0
   num_batches = 0
+  if step_in_epoch.numpy() == num_steps_per_epoch:
+      step_in_epoch.assign(0)
   while step_in_epoch.numpy() < num_steps_per_epoch:
     total_loss += train_step(iterator)
     num_batches += 1
     step_in_epoch.assign_add(1)
-
+    check_point_path = checkpoint_manager.save()
   train_loss = total_loss / num_batches
   print('Epoch: %d, accuracy: %f, train_loss: %f.'
                 %(epoch.numpy(), train_accuracy.result(), train_loss))
 
-  train_accuracy.reset_states()
+  train_accuracy.reset_state()
 
-  check_point_path = checkpoint_manager.save()
+  #check_point_path = checkpoint_manager.save()
 
   if not _is_chief(task_type, task_id, cluster_spec):
     tf.io.gfile.rmtree(write_checkpoint_dir)
