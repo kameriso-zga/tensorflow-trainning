@@ -486,3 +486,50 @@ Tue Mar 26 15:39:46 2024
 |    0   N/A  N/A   1066284      C   python                                      308MiB |
 +---------------------------------------------------------------------------------------+
 ```
+
+## 6.tensorflow 分布式训练
+
+参考官方tf demo :[tensorflow 分布式训练官方demo](https://www.tensorflow.org/tutorials/distribute/multi_worker_with_ctl?hl=zh-cn#%E5%AE%8C%E6%95%B4%E4%BB%A3%E7%A0%81%E4%B8%80%E8%A7%88)
+
+代码仓库：/tensorflow-trainning/分布式调度/keras_distrubuted
+
+**<u>踩坑记录：</u>**
+
+tensorflow 分布式训练中无法消费 从节点的问题，参考：[环境变量初始化问题](https://www.cnblogs.com/zhanxiage1994/p/7989340.html) 
+
+针对以上问题，tensorflow 的官方demo 在安装的时候有写到环境变量的初始化问题
+
+在import tensorflow as tf 之前需要对环境变量初始化
+
+```py
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ.pop('TF_CONFIG', None)
+if '.' not in sys.path:
+  sys.path.insert(0, '.')
+```
+
+所以在导入tf 的时候整体是这样的
+
+```
+import os
+import json
+import sys
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ.pop('TF_CONFIG', None)
+if '.' not in sys.path:
+  sys.path.insert(0, '.')
+
+import tensorflow as tf
+from mnist import *
+from multiprocessing import util
+```
+
+对于容错问题，以及主从节点是否可以共享的测试：/tensorflow-trainning/分布式调度/keras_distrubuted 
+
+step=7 的时候，重启chef 节点后，可以看到epoch 是从7 开始继续训练
+
+```python
+print('while loop current epoch is : ', epoch.numpy())
+```
+
