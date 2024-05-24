@@ -109,7 +109,7 @@ pip install tf-nightly #python调用cuda GPU需要安装对应的依赖
 ### 2.3 运行demo 查看nivida gpu
 
 ```shell
-[root@host-10-16-0-8 zjiajia] python3 GPU.py 
+[root@host-10-16-0-8 ] python3 GPU.py 
 2024-03-29 13:59:11.706934: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
 2024-03-29 13:59:12.844370: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
 ```
@@ -182,7 +182,7 @@ watch -n1 nvidia-smi
 如何查看集群是否安装Nvidia-gpu-operator
 
 ```shell
-[root@host-10-16-0-8 ~]# kubectl get pod -A | grep gpu-operator
+[root@host-~]# kubectl get pod -A | grep gpu-operator
 gpu-operator                gpu-feature-discovery-zs9f6                                         2/2     Running                  0                 10d
 gpu-operator                gpu-operator-777f475bc6-qdbkn                                       1/1     Running                  0                 10d
 gpu-operator                gpu-operator-node-feature-discovery-gc-6f4d497848-td79d             1/1     Running                  0                 10d
