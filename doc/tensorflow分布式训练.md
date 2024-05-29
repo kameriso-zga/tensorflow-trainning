@@ -1,273 +1,67 @@
-# Tensorflow 分布式调度
+# tensorflow-elastic-traning
 
-## 1.代码
+## 实验内容
 
-参考：[使用 Keras 和 MultiWorkerMirroredStrategy 的自定义训练循环](https://www.tensorflow.org/tutorials/distribute/multi_worker_with_ctl?hl=zh-cn#%E5%AE%8C%E6%95%B4%E4%BB%A3%E7%A0%81%E4%B8%80%E8%A7%88)
+------
 
-实验环境
+基于原生进行大模型训练。
 
-硬件：一个chef 一个worker
+- 关注于训练过程和checkpoint的保存。
 
-软件：Python 3.9.9 、CUDA Version 12.3 
+基于原生大模型进行分布式和弹性训练。
 
-## 2.分布式调度实验内容
+- 关注checkpoint保存的过程在业务层的实现。
+- 关注主从机之间checkpoint的流转过程的实现。
 
-### 2.1 分布式调度实现
+## 实验结论
 
-以上实验主要通过设置 TF_CONFIG 环境变量来实现跨节点调度：设置 [TF_CONFIG 环境变量](https://www.tensorflow.org/guide/distributed_training?hl=zh-cn#%E8%AE%BE%E7%BD%AE_tf_config_%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F)
-
-<u>Ps:在主节点启动的时候index=0，从节点启动的时候index=1</u>
+------
 
-在TensorFlow的分布式训练中，`TF_CONFIG`是一个用于配置分布式训练环境的环境变量。它告诉TensorFlow集群的架构以及每个节点的角色和任务。这是实现分布式训练的关键步骤之一。
 
-```python
-def_cluster = {
-    "cluster": {
-        "worker": ["localhost:12345", "localhost:23456"]
-    },
-    "task": {"type": "worker", "index": 1}
-}
-
-# Set the TF_CONFIG environment variable
-os.environ['TF_CONFIG'] = json.dumps(def_cluster)
-```
-
-在TensorFlow的分布式训练脚本中，可以使用`tf.distribute.MultiWorkerMirroredStrategy`来配置分布式训练环境
 
-```python
-strategy = tf.distribute.MultiWorkerMirroredStrategy()
-with strategy.scope():
-  multi_worker_model = build_cnn_model()
+- tensorflow 框架下，单机单卡可以使用 [tf.distribute.MirroredStrategy](https://www.tensorflow.org/guide/distributed_training?hl=zh-cn#mirroredstrategy)  快速实现分布式训练
 
-  multi_worker_dataset = strategy.distribute_datasets_from_function(
-      lambda input_context: dataset_fn(global_batch_size, input_context))
-  optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.001)
-  train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-      name='train_accuracy')
-```
-
-### 2.2已完成的分布式调度的实验内容
-
-以下对应的实验都是基于代码仓库的main.py 函数和mnist.py函数做修改
-
-1. 单卡的大模型训练
-
-   ```python
-   #使用cuda 0 
-   os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-   
-   # 检查TensorFlow是否识别到了GPU
-   print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-   per_worker_batch_size = 64
-   
-   #num_workers 配置为1
-   num_workers = 1
-   global_batch_size = per_worker_batch_size * num_workers
-   
-   num_epochs = 10
-   num_steps_per_epoch=70
-   ```
-
- 2. 单机多卡单进程训练
-
-    主节点12345 进程配置修改
-
-    ```python
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    def_cluster = {
-        "cluster": {
-            "worker": ["chefIp:12345", "chefIp:23456"]
-        },
-        "task": {"type": "worker", "index": 0}
-    }
-    ```
-
-    主节点23456 进程配置修改
-
-    ```python
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    def_cluster = {
-        "cluster": {
-            "worker": ["chefIp:12345", "chefIp:23456"]
-        },
-        "task": {"type": "worker", "index": 1}
-    }
-    ```
-
- 3. 分布式单机多进程训练（依赖tensorflow 分布式调度策略）
-
-    设置cuda 设备
-
-    ```python
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    ```
-
-    主节点12345的进程配置
-
-    ```python
-    def_cluster = {
-        "cluster": {
-            "worker": ["chefIp:12345", "chefIp:23456"]
-        }, 
-        "task": {"type": "worker", "index": 0}
-    }
-    
-    # Set the TF_CONFIG environment variable
-    
-    os.environ['TF_CONFIG'] = json.dumps(def_cluster)
-    ```
-
-    主节点23456 的进程配置
-
-    ```python
-    def_cluster = {
-        "cluster": {
-            "worker": ["chefIp:12345", "chefIp:23456"]
-        },
-        "task": {"type": "worker", "index": 1}
-    }
-    ```
-
-    
-
- 4. 分布式弹性训练, 多机多卡训练(依赖tensorflow 分布式调度策略) [无法热弹]
-
-    主节点TF_CONFIG 设置
-
-    ```python
-    def_cluster = {
-        "cluster": {
-            "worker": ["chefIp:12345", "workerIp:23456"]
-        },
-        "task": {"type": "worker", "index": 0}
-    }
-    
-    # Set the TF_CONFIG environment variable
-    os.environ['TF_CONFIG'] = json.dumps(def_cluster)
-    ```
-
-    从节点TF_CONFIG设置
-
-    ```python
-    def_cluster = {
-        "cluster": {
-            "worker": ["chefIp:12345", "workerIp:23456"]
-        },
-        "task": {"type": "worker", "index": 1}
-    }
-    ```
-
- 5. 保存checkpoint
-
-    ```python
-    #checkpoint 的保存内容可以自定义
-    checkpoint = tf.train.Checkpoint(
-        model=multi_worker_model, epoch=epoch, step_in_epoch=step_in_epoch)
-    write_checkpoint_dir = write_filepath(checkpoint_dir, task_type, task_id,
-                                          cluster_spec)
-    
-    checkpoint_manager = tf.train.CheckpointManager(
-        checkpoint, directory=write_checkpoint_dir, max_to_keep=1)
-    
-    
-    latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-    
-    ....
-    #训练没有结束的时候，每次都保存一次checkpoint
-    while step_in_epoch.numpy() < num_steps_per_epoch:
-      total_loss += train_step(iterator)
-      num_batches += 1
-      step_in_epoch.assign_add(1)
-      check_point_path = checkpoint_manager.save()
-    ```
-
- 6. 主从节点共享checkpoint 、checkpoint一致性（依赖tensorflow 分布式调度策略）
-
-    由于tensorflow 的分布式训练框架可以实现checkpoint 主从节点共享以及checkpoint一致性。所以在测试tf 分布式调度，主从节点是否共享checkpoint 的方式如下：
-
-    执行到step =7 的时候，断掉chef ,再重新启动master 节点，看代码中的epoch 打印是否从7开始
-
-    ```python
-    while epoch.numpy() < num_epochs:
-      print('while loop current epoch is : ', epoch.numpy())
-      iterator = iter(multi_worker_dataset)
-      total_loss = 0.0
-      num_batches = 0
-    ```
-
- 7. h20 单卡调度、checkpoint 保存
-
-    参考以上单卡调度和checkpoint 保存
-
-8. tensorflow 适配pytorch 的数据集
-   参考mint.py 的代码做修改，数据集下载到本地，更换dataset_dir的路径
-
-   ```python
-   # 加载自定义数据集函数
-   def dataset_fn(global_batch_size, input_context=None):
-       dataset_dir = 'root/zjiajia/xxx'
-       train_dataset = image_dataset_from_directory(
-           os.path.join(dataset_dir, 'train'),
-           batch_size=global_batch_size,
-           image_size=(32, 32),  # 根据需要调整
-           shuffle=True
-       )
-       validation_dataset = image_dataset_from_directory(
-           os.path.join(dataset_dir, 'validation'),
-           batch_size=global_batch_size,
-           image_size=(32, 32)  # 根据需要调整
-       )
-   
-       # 分发数据集
-       if input_context:
-           train_dataset = train_dataset.shard(input_context.num_input_pipelines, input_context.input_pipeline_id)
-           validation_dataset = validation_dataset.shard(input_context.num_input_pipelines, input_context.input_pipeline_id)
-       
-       train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
-       validation_dataset = validation_dataset.prefetch(tf.data.experimental.AUTOTUNE)
-       
-       return train_dataset
-   ```
-
-
-
-通过一系列的实验，我们验证了TensorFlow在单机和多机、多卡和多进程环境下的分布式调度与训练能力。实验的成功表明，TensorFlow具备良好的扩展性与适应性，能够应对从单设备到跨设备、跨节点的多种场景，并保证了训练过程中的数据一致性和模型的可靠性。
-
-## 3.踩坑记录
-
-### 3.1 问题
-
-tensorflow 分布式训练中无法消费 从节点的问题，参考：[环境变量初始化](https://www.cnblogs.com/zhanxiage1994/p/7989340.html)
-
-
-
-### 3.2解决方式
-
-针对以上问题，tensorflow 的官方demo 在安装的时候有写到环境变量的初始化问题
-
-在import tensorflow as tf 之前需要对环境变量初始化
-
-```python
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ.pop('TF_CONFIG', None)
-if '.' not in sys.path:
-  sys.path.insert(0, '.')
-```
-
-所以在倒入tf 的时候整体是这样的
-
-```python
-import os
-import json
-import sys
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ.pop('TF_CONFIG', None)
-if '.' not in sys.path:
-  sys.path.insert(0, '.')
-
-import tensorflow as tf
-from mnist import *
-from multiprocessing import util
-```
+- tensorflow 分布式框架：通过设置 [TF_CONFIG 环境变量](https://www.tensorflow.org/guide/distributed_training?hl=zh-cn#%E8%AE%BE%E7%BD%AE_tf_config_%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F) 和tf 分布式框架 API [tf.distribute.MultiWorkerMirroredStrategy](https://www.tensorflow.org/guide/distributed_training?hl=zh-cn#multiworkermirroredstrategy)实现分布式训练，在当前实验环境下，无法实现热重启worker，在master 启动后，指定等待时间，满足一定弹性条件的情况下，会重启所有worker并退出。
 
+- 在训练的过程中，**不论是添加节点还是减少节点以及节点故障，都会让所有节点停止工作**，此时需要脚本自己进行恢复。
+
+  tensorflow 的分布式框架支持checkpoint 的主从同步问题
+
+  checkpoint 需要自己保存`ckpt`，`ckpt`内部需要保存网络参数、训练进度等, 以及其他的业务数据。
+
+  
+
+## 实验实操
+
+------
+
+**【实验1】基础原生简易大模型训练**
+
+单卡训练
+
+- 单卡训练之前实验有做过，直接参考：[TensorFlow图像识别](https://gitlab.bingosoft.net/bingomatrix/example/tensorflow-start/blob/develop/README.md)  TensorFlow-Digit-Recognizer 仓库
+
+多卡训练
+
+- 多卡训练中指定多个gpu,通过[tf.distribute.MirroredStrategy](https://www.tensorflow.org/guide/distributed_training?hl=zh-cn#mirroredstrategy) 实现本地多 GPU 之间进行同步训练。参考mutiple_gpu.py
+- tensorflow 的多卡训练和pytorch 有多不同的是，需要使用tf 的分布式调度接口tf.distribute.MirroredStrategy来实现，不单指定多gpu。
+
+**【实验2】分布式的弹性训练**
+
+使用tensorflow官方提供的脚本来做分布式训练，该脚本的具体实现有具体的注释，可参考distribute.py。实现分布式调度最主要的是指定TF_CONFIG 的环境变量参数和调用tf 分布式API[`tf.distribute.MultiWorkerMirroredStrategy`](https://www.tensorflow.org/api_docs/python/tf/distribute/MultiWorkerMirroredStrategy?hl=zh-cn)实现的。多卡的参数指定依然跟单机多卡的形式一样，通过指定环境变量的参数CUDA_VISIBLE_DEVICES 实现。
+
+TF_CONFIG` 是一个 JSON 字符串，包含两个主要部分：`cluster` 和 `task，参数说明如下：
+
+**cluster字段**
+
+`cluster` 字段定义了整个集群的拓扑结构，即包含了所有参与训练的 worker 和 ps 的信息。
+
+- `worker`: 定义了 worker 的地址列表。worker 是实际进行模型训练的节点。
+- `ps`: 定义了参数服务器（ps）的地址列表。参数服务器负责存储和更新模型参数。
+
+**task字段**
+
+`task` 字段定义了当前节点在集群中的角色和索引。
+
+- `type`: 当前节点的类型，可以是 `worker` 或 `ps`。决定了当前节点是执行计算还是管理参数。
+- `index`: 当前节点在其类型中的索引，从 0 开始。用于唯一标识同类型节点中的某个节点。
